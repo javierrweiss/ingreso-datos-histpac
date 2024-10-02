@@ -23,7 +23,7 @@
 (defn iniciar-mulog
   [entorno]
   (µ/set-global-context! {:app "ingreso-historias-clinicas-teleconsulta"
-                         :fecha (LocalDateTime/now)
+                         :fecha-ingreso (LocalDateTime/now)
                          :jvm-version (System/getProperty "java.version")
                          :env entorno
                          :os (System/getProperty "os.name")})
@@ -94,7 +94,7 @@
                          :histpacnro2 ;; hc
                          :histpacespfir1 ;; 407
                          :histpacmedfir ;; 999880 (con dígito verificador) 
-                         :histpacmotivo ;; numerador => Hace referencia al diagnóstico
+                         :histpacmotivo ;; numerador motivo
                          :histpacestudi ;; 0 
                          :histpachorasobre ;; 0
                          :histpachfinal ;; hora final atención
@@ -102,7 +102,7 @@
                          :histpacrfinal ;; completar con ceros
                          :histpacdiagno ;; diagnóstico => sacar de tbc_patologia
                          :histpacpatolo ;; 3264
-                         :histpactratam ;; motivo (guardar acá numerador ) tbl_parametros param_id 16, inc contador_entero y guardar ese número
+                         :histpactratam ;; numerador diagnostico
                          :histpacmedfirnya ;; nombre médico 
                          :histpacmedfirmat ;; matricula 
                          :histpachatenc ;; call_start_datetime
@@ -113,7 +113,7 @@
                          :histpacderivasec ;; ""
                          :histpacobra ;; obra
                          :histpacpplan ;; plan (se saca de hist_cab_new)
-                         :histpacplan ;; plan (se saca de hist_cab_new)
+                         :histpacplan ;;un caracter
                          :histpacafil ;; nro afiliado
                          :histpacpedambula ;; 0
                          :histpacconshiv ;; ""
@@ -229,7 +229,7 @@
     (try
       (jdbc/execute! conn (sql-inserta-en-tbc-histpac-txt [numerador 1 0 0 "" cantidad]) {:builder-fn rs/as-unqualified-kebab-maps})
       (doseq [text textos]
-        (jdbc/execute! conn (sql-inserta-en-tbc-histpac-txt [numerador 1 @contador @contador text 0]))
+        (jdbc/execute! conn (sql-inserta-en-tbc-histpac-txt [numerador 1 @contador @contador text 0]) {:builder-fn rs/as-unqualified-kebab-maps})
         (swap! contador inc))
       (catch SQLException e (throw (ex-info "Error al guardar texto de historia: " {:conexion conn
                                                                                     :numerador numerador
@@ -258,45 +258,45 @@
         doctor (->> nombredeldoctor (take 29) (apply str))
         desc-diagnostico (->> (obtener-descripcion-diagnostico conexion-maestros) (take 27) (apply str))]
     [[historiaclinica
-       da
-       hora
-       minutos
-       segundos
-       2
-       407
-       historiaclinica
-       da
-       historiaclinica
-       407
-       999880
-       numerador-diagnostico
-       0
-       0
-       hora-fin
-       minutos-fin
-       0
-       desc-diagnostico
-       3264
-       numerador-tratamiento
-       doctor
-       mn
-       hora
-       minutos 
-       segundos
-       0
-       0
-       ""
-       (or obra 0)
-       (or plan "")
-       (or plan "")
-       (or nro-afiliado "")
-       0
-       ""
-       0
-       0
-       0
-       "N"
-       0]
+      da
+      hora
+      minutos
+      segundos
+      2
+      407
+      historiaclinica
+      da
+      historiaclinica
+      407
+      999880
+      numerador-tratamiento
+      0
+      0
+      hora-fin
+      minutos-fin
+      0
+      desc-diagnostico
+      3264
+      numerador-diagnostico
+      doctor
+      mn
+      hora
+      minutos 
+      segundos
+      0
+      0
+      ""
+      (or obra 0)
+      (or plan "") 
+      ""
+      (or nro-afiliado "")
+      0
+      ""
+      0
+      0
+      0
+      "N"
+      0]
        [[numerador-tratamiento (str "Motivo: " motivo "\\n Seguimiento: " seguimiento)] 
         [numerador-diagnostico (str "Diagnóstico: " diagnostico " Tratamiento: " tratamiento) (str "Profesional: " doctor  " Matricula: " mn)]]]))
 
@@ -379,7 +379,8 @@
   (µ/log ::inicio-parseo-csv)
   (when (tc/dataset? ds)
     (try
-      (-> ds
+      (-> ds 
+          (tc/drop-missing [:da :horadeatencin]) 
           (tc/map-columns :da #(as-> % f
                                  (string/split f #"-")
                                  (reverse f)
@@ -395,7 +396,7 @@
                                               Integer/parseInt))
           (tc/map-columns :nombredeldoctor #(-> % string/upper-case sanitizar-string))
           (tc/map-columns :nombredelpaciente #(-> % string/upper-case sanitizar-string))
-          (tc/map-columns :seguimiento #(sanitizar-string %))
+          (tc/map-columns :seguimientoevolucion #(sanitizar-string %))
           (tc/map-columns :diagnostico #(sanitizar-string %))
           (tc/map-columns :motivo #(sanitizar-string %))
           (tc/map-columns :tratamiento #(sanitizar-string %)))
@@ -530,6 +531,7 @@
   (def csv (leer-csv "C://Users//jrivero//Downloads//Telemedicina-presencial-Sanatorio.csv"))
 
   (def csv-transformado (-> csv
+                            (tc/drop-missing [:da :horadeatencin])
                             (tc/map-columns :da #(as-> % f
                                                    (string/split f #"-")
                                                    (reverse f)
@@ -545,14 +547,14 @@
                                                                 Integer/parseInt))
                             (tc/map-columns :nombredeldoctor #(-> % string/upper-case sanitizar-string))
                             (tc/map-columns :nombredelpaciente #(-> % string/upper-case sanitizar-string))
-                            (tc/map-columns :seguimiento #(sanitizar-string %))
+                            (tc/map-columns :seguimientoevolucion #(sanitizar-string %))
                             (tc/map-columns :diagnostico #(sanitizar-string %))
                             (tc/map-columns :motivo #(sanitizar-string %))
                             (tc/map-columns :tratamiento #(sanitizar-string %))))
 
   (normalizar-datos csv)
   
-  (tc/info csv)
+  (tc/info csv-transformado)
 
   (def fecha-nombre (-> (tc/select-columns csv-transformado [:da :dnidelpaciente])
                         (tc/rows)))
