@@ -23,10 +23,10 @@
 (defn iniciar-mulog
   [entorno]
   (µ/set-global-context! {:app "ingreso-historias-clinicas-teleconsulta"
-                         :fecha-ingreso (LocalDateTime/now)
-                         :jvm-version (System/getProperty "java.version")
-                         :env entorno
-                         :os (System/getProperty "os.name")})
+                          :fecha-ingreso (LocalDateTime/now)
+                          :jvm-version (System/getProperty "java.version")
+                          :env entorno
+                          :os (System/getProperty "os.name")})
   (µ/start-publisher! {:type :simple-file
                        :filename "ingreso_datos_histpac_log/events.log"}))
  
@@ -123,7 +123,7 @@
                          :histpacyodo ;; "N"
                          :histpaccancd ;; 0
                          ]
-               :values values}))
+               :values [values]}))
 
 (defn sql-busca-registro-en-tbc-histpac
   [histpacnro histpacfec histpach histpacm]
@@ -307,11 +307,13 @@
   (when (== 0 (count registros))
     (throw (ex-info "No existen registros para insertar" {:registros registros})))
   (try 
-    (let [cantidad (-> (jdbc/execute! conexion (sql-inserta-en-tbc-histpac registros) {:builder-fn rs/as-unqualified-kebab-maps})
-                       first
-                       :next.jdbc/update-count)]
-      (prn (str cantidad " registro(s) insertado(s)"))
-      (µ/log ::registros-insertados :cantidad cantidad))
+    (let [cantidad (atom 0)]
+      (doseq [registro registros] (when (-> (jdbc/execute! conexion (sql-inserta-en-tbc-histpac registro) {:builder-fn rs/as-unqualified-kebab-maps})
+                                            first
+                                            :next.jdbc/update-count)
+                                    (swap! cantidad inc)))
+      (prn (str @cantidad " registro(s) insertado(s)"))
+      (µ/log ::registros-insertados :cantidad @cantidad))
     (catch SQLException e (let [msj (ex-message e)] 
                             (prn (str "Hubo un problema al insertar en tbc_histpac " msj))
                               (µ/log ::error-insercion-tbc-histpac :mensaje msj)))))
