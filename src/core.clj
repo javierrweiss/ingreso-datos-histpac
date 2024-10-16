@@ -398,8 +398,8 @@
                                               Integer/parseInt))
           (tc/map-columns :nombredeldoctor #(-> % string/upper-case sanitizar-string))
           (tc/map-columns :nombredelpaciente #(-> % string/upper-case sanitizar-string))
-          (tc/map-columns :seguimientoevolucion #(sanitizar-string %))
-          (tc/map-columns :diagnostico #(sanitizar-string %))
+          (tc/map-columns :seguimientoevolucin #(sanitizar-string %))
+          (tc/map-columns :diagnstico #(sanitizar-string %))
           (tc/map-columns :motivo #(sanitizar-string %))
           (tc/map-columns :tratamiento #(sanitizar-string %)))
       (catch ClassCastException e (let [msj (ex-message e)] 
@@ -532,6 +532,8 @@
 
   (def csv (leer-csv "C://Users//jrivero//Downloads//Telemedicina-presencial-Sanatorio.csv"))
 
+  (tc/info csv)
+
   (def csv-transformado (-> csv
                             (tc/drop-missing [:da :horadeatencin])
                             (tc/map-columns :da #(as-> % f
@@ -549,10 +551,10 @@
                                                                 Integer/parseInt))
                             (tc/map-columns :nombredeldoctor #(-> % string/upper-case sanitizar-string))
                             (tc/map-columns :nombredelpaciente #(-> % string/upper-case sanitizar-string))
-                            (tc/map-columns :seguimientoevolucion #(sanitizar-string %))
-                            (tc/map-columns :diagnostico #(sanitizar-string %))
+                            (tc/map-columns :seguimientoevolucin #(sanitizar-string %))
+                            (tc/map-columns :diagnstico #(sanitizar-string %))
                             (tc/map-columns :motivo #(sanitizar-string %))
-                            (tc/map-columns :tratamiento #(sanitizar-string %))))
+                            (tc/map-columns :tratamiento #(sanitizar-string %)))) 
 
   (normalizar-datos csv)
   
