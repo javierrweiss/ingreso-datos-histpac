@@ -383,11 +383,12 @@
     (try
       (-> ds
           (tc/drop-missing [:da :horadeatencin])
-          (tc/map-columns :da #(as-> % f
-                                 (string/split f #"-")
-                                 (reverse f)
-                                 (apply str f)
-                                 (Integer/parseInt f)))
+          (tc/map-columns :da #(when %
+                                 (as-> % f
+                                   (string/split f #"/")
+                                   (reverse f)
+                                   (apply str f)
+                                   (Integer/parseInt f))))
           (tc/map-columns :fechadenacimiento #(when %
                                                 (as-> % f
                                                   (string/split f #"/")
