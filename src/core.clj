@@ -381,18 +381,19 @@
   (µ/log ::inicio-parseo-csv)
   (when (tc/dataset? ds)
     (try
-      (-> ds 
-          (tc/drop-missing [:da :horadeatencin]) 
+      (-> ds
+          (tc/drop-missing [:da :horadeatencin])
           (tc/map-columns :da #(as-> % f
                                  (string/split f #"-")
                                  (reverse f)
                                  (apply str f)
                                  (Integer/parseInt f)))
-          (tc/map-columns :fechadenacimiento #(as-> % f
-                                                (string/split f #"/")
-                                                (reverse f)
-                                                (apply str f)
-                                                (Integer/parseInt f)))
+          (tc/map-columns :fechadenacimiento #(when %
+                                                (as-> % f
+                                                  (string/split f #"/")
+                                                  (reverse f)
+                                                  (apply str f)
+                                                  (Integer/parseInt f))))
           (tc/map-columns :horadeatencin #(-> %
                                               (string/replace #"\s|:|hs" "")
                                               Integer/parseInt))
@@ -463,6 +464,8 @@
                            (µ/log ::error :mensaje msj :datos data))))))
 
 (tests
+ 
+(sanitizar-string nil)
 
  (descomponer-hora 1852) := [18 52 0]
  (descomponer-hora 0) := [0 0 0]
@@ -494,7 +497,7 @@
  (sanitizar-string "este es un texto en minúsculas, con eñes y cosas así, como ô ö y ò y  más óes") := "este es un texto en minusculas, con enes y cosas asi, como o o y o y  mas oes"
  )
 
-
+ 
 (comment
 
   (hyperfiddle.rcf/enable!)
@@ -534,6 +537,9 @@
 
   (tc/info csv)
 
+  (tc/head csv)
+  
+
   (def csv-transformado (-> csv
                             (tc/drop-missing [:da :horadeatencin])
                             (tc/map-columns :da #(as-> % f
@@ -541,11 +547,12 @@
                                                    (reverse f)
                                                    (apply str f)
                                                    (Integer/parseInt f)))
-                            (tc/map-columns :fechadenacimiento #(as-> % f
-                                                                  (string/split f #"/")
-                                                                  (reverse f)
-                                                                  (apply str f)
-                                                                  (Integer/parseInt f)))
+                            (tc/map-columns :fechadenacimiento #(when % 
+                                                                  (as-> % f
+                                                                    (string/split f #"/")
+                                                                    (reverse f)
+                                                                    (apply str f)
+                                                                    (Integer/parseInt f))))
                             (tc/map-columns :horadeatencin #(-> %
                                                                 (string/replace #"\s|:|hs" "")
                                                                 Integer/parseInt))
@@ -554,10 +561,10 @@
                             (tc/map-columns :seguimientoevolucin #(sanitizar-string %))
                             (tc/map-columns :diagnstico #(sanitizar-string %))
                             (tc/map-columns :motivo #(sanitizar-string %))
-                            (tc/map-columns :tratamiento #(sanitizar-string %)))) 
+                            (tc/map-columns :tratamiento #(sanitizar-string %))))
 
   (normalizar-datos csv)
-  
+
   (tc/info csv-transformado)
 
   (def fecha-nombre (-> (tc/select-columns csv-transformado [:da :dnidelpaciente])
@@ -716,8 +723,8 @@
           #{\Ù \Ú \Ü \Û} :>> (constantly \U)
           #{\Ç} :>> (constantly \C)
           identity :>> identity)
-        (seq "CARDINALI, CÉSAR"))
- 
+       (seq "CARDINALI, CÉSAR"))
+
 ;;;;;;;;;;;;;;;;;;;;; PREPARAR BASE DE DATOS DEL PERFIL TEST ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;; Asegurarse de poblar las bases de tbc_reservas y tbc_hist_cab_new con los datos adecuados!!!
