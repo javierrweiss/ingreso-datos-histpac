@@ -152,7 +152,7 @@
   ["SELECT r.reservashiscli, n.histcabobra, n.histcabplanx, n.histcabnrobenef 
     FROM tbc_reservas r
     INNER JOIN tbc_hist_cab_new n ON r.reservashiscli = n.histcabnrounico
-    WHERE r.reservasfech = ? AND r.reservasesp = ? AND n.histcabnrodoc = ?" fecha 407 dni])
+    WHERE r.reservasfech = ? AND n.histcabnrodoc = ?" fecha dni])
 
 (defn- obtener-numerador-sql
   []
@@ -568,7 +568,14 @@
 
   (def csv (leer-csv "/home/jrivero/Telemedicina-presencial-Sanatorio.csv"))
 
-  (tc/info csv)
+  (tc/info csv) 
+  
+  (-> csv 
+      (tc/select-columns [:mn])
+       (tc/select-rows #(string? (:mn %))))
+  
+  (-> csv 
+      (tc/select-rows #(= (:mn %) "20321)")))
 
   (tc/head csv)
   
