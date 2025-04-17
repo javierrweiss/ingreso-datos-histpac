@@ -7,7 +7,8 @@
          babashka/fs {:mvn/version "0.5.22"}
          scicloj/tablecloth {:mvn/version "7.029.2"} 
          com.hyperfiddle/rcf {:mvn/version "20220926-202227"}
-         com.brunobonacci/mulog {:mvn/version "0.9.0"}
-         org.slf4j/slf4j-nop {:mvn/version "2.1.0-alpha1"}}
+         com.brunobonacci/mulog {:mvn/version "0.9.0"} 
+         org.slf4j/slf4j-nop {:mvn/version "2.1.0-alpha1"}
+         djblue/portal {:mvn/version "0.58.5"}}
  :aliases {:ingresar {:exec-fn core/-main}
            :test {:jvm-opts ["-Dhyperfiddle.rcf.generate-tests=true"]}}}
