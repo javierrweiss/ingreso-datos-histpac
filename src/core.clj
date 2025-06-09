@@ -450,7 +450,8 @@
           (tc/map-columns :seguimientoevolucin (fnil sanitizar-string ""))
           (tc/map-columns :diagnstico (fnil sanitizar-string ""))
           (tc/map-columns :motivo (fnil sanitizar-string ""))
-          (tc/map-columns :tratamiento (fnil sanitizar-string "")))
+          (tc/map-columns :tratamiento (fnil sanitizar-string ""))
+          (tc/map-columns :mn #(when % (->> % (re-seq #"\d") (apply str) Integer/parseInt))))
       (catch ClassCastException e (let [msj (ex-message e)] 
                                     (prn "Hubo una excepción al parsear el archivo " msj)
                                     (µ/log ::error-parseo-csv :mensaje msj)
@@ -626,10 +627,15 @@
         (tc/map-columns :seguimientoevolucin (fnil sanitizar-string ""))
         (tc/map-columns :diagnstico (fnil sanitizar-string ""))
         (tc/map-columns :motivo (fnil sanitizar-string ""))
-        (tc/map-columns :tratamiento (fnil sanitizar-string ""))))
+        (tc/map-columns :tratamiento (fnil sanitizar-string ""))
+        (tc/map-columns :mn #(when % (->> % (re-seq #"\d") (apply str) Integer/parseInt)))))
+
+       ( #(when % (->> % (re-seq #"\d") (apply str) Integer/parseInt)) "235645")
 
   (def normalizado (normalizar-datos csv))
 
+  (tc/info normalizado)
+  
   (existe-registro? asistencial-prod 760143 20241210 15 40)
 
 
