@@ -152,25 +152,26 @@
 (defn obtener-ds-reservas
   [asistencial min-date]
   (µ/log ::obteniendo-dataset-reservas)
-  (tc/dataset
-   (try
-     (jdbc/execute! asistencial (sql/format {:select [[:tbc_reservas/reservashiscli :historiaclinica]
-                                                      [:tbc_reservas/reservasfech :da]
-                                                      [:tbc_hist_cab_new/histcabobra :obra]
-                                                      [:tbc_hist_cab_new/histcabnrodoc :dnidelpaciente]
-                                                      [:tbc_hist_cab_new/histcabplanx :plan]
-                                                      [:tbc_hist_cab_new/histcabnrobenef :nro-afiliado]]
-                                             :from :tbc_reservas
-                                             :inner-join [[:tbc_hist_cab_new] [:= :tbc_reservas/reservashiscli :tbc_hist_cab_new/histcabnrounico]]
-                                             :where [:> :reservasfech min-date]}))
-     (catch SQLException e (throw (let [msj (ex-message e)]
-                                    (µ/log ::error-al-consultar-reservas :mensaje msj)
-                                    (prn msj)
-                                    (ex-info "Error al obtener dataset en reservas" {:mensaje msj}
-                                             (ex-cause e))))))
-   {:key-fn #(-> % name keyword)
-    :parser-fn {:historiaclinica :int32
-                :dnidelpaciente :int32}}))
+  (-> (tc/dataset
+       (try
+         (jdbc/execute! asistencial (sql/format {:select [[:tbc_reservas/reservashiscli :historiaclinica]
+                                                          [:tbc_reservas/reservasfech :da]
+                                                          [:tbc_hist_cab_new/histcabobra :obra]
+                                                          [:tbc_hist_cab_new/histcabnrodoc :dnidelpaciente]
+                                                          [:tbc_hist_cab_new/histcabplanx :plan]
+                                                          [:tbc_hist_cab_new/histcabnrobenef :nro-afiliado]]
+                                                 :from :tbc_reservas
+                                                 :inner-join [[:tbc_hist_cab_new] [:= :tbc_reservas/reservashiscli :tbc_hist_cab_new/histcabnrounico]]
+                                                 :where [:> :reservasfech min-date]}))
+         (catch SQLException e (throw (let [msj (ex-message e)]
+                                        (µ/log ::error-al-consultar-reservas :mensaje msj)
+                                        (prn msj)
+                                        (ex-info "Error al obtener dataset en reservas" {:mensaje msj}
+                                                 (ex-cause e))))))
+       {:key-fn #(-> % name keyword)
+        :parser-fn {:historiaclinica :int32
+                    :dnidelpaciente :int32}})
+      (tc/unique-by [:historiaclinica])))
 
 (defn- obtener-numerador-sql
   []
@@ -246,7 +247,7 @@
       (µ/log ::imprimiendo-pacientes-no-encontrados)
       (tc/print-dataset (tc/tail no-encontrados 50)) 
       (crear-doc-no-encontrados no-encontrados))
-    (tc/inner-join reservas ds [:da :dnidelpaciente]))) 
+    (tc/inner-join reservas ds [:dnidelpaciente]))) 
 
 (defn guarda-texto-de-historia
   [conn numerador texto & [texto2]]
@@ -351,17 +352,17 @@
     (µ/log ::no-existen-registros-para-insertar)
     (throw (ex-info "No existen registros para insertar" {:registros registros})))
   (let [cantidad (atom 0)]
-    (doseq [registro registros] (when (try
-                                        (-> (jdbc/execute! conexion (sql-inserta-en-tbc-histpac registro) {:builder-fn rs/as-unqualified-kebab-maps})
-                                            first
-                                            :next.jdbc/update-count)
-                                        (catch SQLException e (let [msj (ex-message e)]
-                                                                (prn (str "Hubo un problema al insertar en tbc_histpac " msj))
-                                                                (µ/log ::error-insercion-tbc-histpac :mensaje msj :registro registro)
-                                                                #_(throw)
-                                                                ;; No propagar excepción
-                                                                (ex-info "Error al insertar en tbc_histpac" {:mensaje msj :registro registro} (ex-cause e)))))
-                                  (swap! cantidad inc)))
+    (doseq [registro registros] (try
+                                  (-> (jdbc/execute! conexion (sql-inserta-en-tbc-histpac registro) {:builder-fn rs/as-unqualified-kebab-maps})
+                                      first
+                                      :next.jdbc/update-count)
+                                  (swap! cantidad inc)
+                                  (catch SQLException e (let [msj (ex-message e)]
+                                                          (prn (str "Hubo un problema al insertar en tbc_histpac " msj))
+                                                          (µ/log ::error-insercion-tbc-histpac :mensaje msj :registro registro)
+                                                          #_(throw)
+                                                          ;; No propagar excepción
+                                                          (ex-info "Error al insertar en tbc_histpac" {:mensaje msj :registro registro} (ex-cause e))))))
     (prn (str @cantidad " registro(s) insertado(s)"))
     (µ/log ::registros-insertados :cantidad @cantidad)))
 
@@ -461,7 +462,7 @@
           (tc/map-columns :diagnstico (fnil sanitizar-string ""))
           (tc/map-columns :motivo (fnil sanitizar-string ""))
           (tc/map-columns :tratamiento (fnil sanitizar-string ""))
-          (tc/map-columns :mn #(when % (->> % (re-seq #"\d") (apply str) Integer/parseInt))))
+          (tc/map-columns :mn #(when % (if (int? %) % (->> % (re-seq #"\d") (apply str) Integer/parseInt)))))
       (catch ClassCastException e (let [msj (ex-message e)]
                                     (prn "Hubo una excepción al parsear el archivo " msj)
                                     (µ/log ::error-parseo-csv :mensaje msj)
@@ -567,7 +568,7 @@
 (comment
 
   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; DEV SETUP ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
+  
   (hyperfiddle.rcf/enable!)
 
   (clojure.repl.deps/sync-deps)
@@ -577,7 +578,7 @@
   (add-tap #'p/submit)
 
    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; CONEXIONES ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
+  
   (def desal-prod (-> conf :prod :desal))
 
   (def desal-dev (-> conf :dev :desal))
@@ -594,7 +595,7 @@
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
+  
   (sql-busca-registro-en-tbc-histpac 12000 20240101 14 2)
 
   (with-open [conn (jdbc/get-connection asistencial-test)]
@@ -610,12 +611,14 @@
 
   (def csv (leer-csv "/home/jrivero/Telemedicina-presencial-Sanatorio.csv"))
 
-  (tc/info csv)
+  (def csv-2 (leer-csv "/home/jrivero/RocioFlores.csv"))
+
+  (tc/info csv-2)
 
   (tc/head csv)
 
   (def csv-transformado
-    (-> csv (tc/drop-missing [:da :horadeatencin])
+    (-> csv-2 (tc/drop-missing [:da :horadeatencin])
         (tc/map-columns :da #(when %
                                (as-> % f
                                  (string/split f #"/")
@@ -637,19 +640,18 @@
         (tc/map-columns :diagnstico (fnil sanitizar-string ""))
         (tc/map-columns :motivo (fnil sanitizar-string ""))
         (tc/map-columns :tratamiento (fnil sanitizar-string ""))
-        (tc/map-columns :mn #(when % (->> % (re-seq #"\d") (apply str) Integer/parseInt)))))
+        (tc/map-columns :mn #(when % (if (int? %) % (->> % (re-seq #"\d") (apply str) Integer/parseInt))))))
 
   (#(when % (->> % (re-seq #"\d") (apply str) Integer/parseInt)) "235645")
 
-  (def normalizado (normalizar-datos csv))
-
+  (def normalizado (normalizar-datos csv-2))
+  
   (tc/info normalizado)
 
-  (existe-registro? asistencial-prod 760143 20241210 15 40)
-
+  (existe-registro? asistencial-prod 874113 20250204 15 04)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; PROCESAR tbc_reservas en memoria ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
+  
 
   (let [valid-date? (fn [d] (== 8 (-> d str count)))
         ds normalizado
@@ -677,6 +679,26 @@
         (tc/drop-rows (fn [row] (int? (:historiaclinica row))))
         (tc/select-columns [:da :horadeatencin :dnidelpaciente :nombredelpaciente])
         (tc/print-dataset {:print-line-policy :single})))
+  
+  (def reservas (obtener-ds-reservas asistencial-prod 20250101))
+
+  (tc/info reservas)
+
+  (tc/select-rows reservas (comp #{44363731} :dnidelpaciente))
+
+  (tc/select-rows normalizado (comp #{32531145 43476960 44363731} :dnidelpaciente))
+
+  (def d (adjuntar-info-complementaria normalizado asistencial-prod))
+  
+  (tc/select-rows d #(#{32531145 43476960 44363731} (:dnidelpaciente %)))
+  
+  (def d-2 (tc/unique-by d [:dnidelpaciente :historiaclinica :da :horadeatencin]))
+
+  (tc/select-rows d (comp #{32531145 43476960 44363731} :dnidelpaciente))
+
+  (tc/select-rows d-2 (comp #{32531145 43476960 44363731} :dnidelpaciente))
+  
+  (tc/tail d 50)
 
   (def dataset-final
     (with-open [conn (jdbc/get-connection asistencial-prod)]
@@ -725,10 +747,33 @@
                   (== (first reg) 862673))
                 historias))
 
-  (insertar-en-tbc-histpac [(first historias)] asistencial-dev)
+  (def registro
+    (-> d
+        (tc/select-columns [:historiaclinica
+                            :da
+                            :obra
+                            :dnidelpaciente
+                            :plan
+                            :mn
+                            :nro_afiliado
+                            :horadeatencin
+                            :nombredeldoctor
+                            :nombredelpaciente
+                            :fechadenacimiento
+                            :coberturamdica
+                            :seguimientoevolucin
+                            :diagnstico
+                            :motivo
+                            :tratamiento])
+        (tc/rows :as-maps)))
+  (inserta-en-tablas-histpac registro desal-prod maestros-prod asistencial-prod)
+  (def v (armar-registros-histpac (first registro) desal-prod maestros-prod))
+
+  (insertar-en-tbc-histpac [(first v)] asistencial-prod)
+  (apply guarda-texto-de-historia asistencial-prod (first (v 1)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;  
-
+  
 
   (drop 580 (tc/column normalizado :dnidelpaciente))
 
@@ -849,9 +894,9 @@
        (seq "CARDINALI, CÉSAR"))
 
 ;;;;;;;;;;;;;;;;;;;;; PREPARAR BASE DE DATOS DEL PERFIL TEST ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
+  
   ;; Asegurarse de poblar las bases de tbc_reservas y tbc_hist_cab_new con los datos adecuados!!!
-
+  
   (with-open [conn (jdbc/get-connection asistencial-test)]
     (jdbc/execute! conn ["CREATE TABLE tbc_histpac (
 	HistpacNro DECIMAL(10,0) NOT NULL,
@@ -1018,5 +1063,6 @@
   (with-open [conn (jdbc/get-connection asistencial-prod)]
     (jdbc/execute! conn (consulta-en-tbc-reservas 20250104 4619490) {:builder-fn rs/as-unqualified-kebab-maps}))
 
-
-  :rfc) 
+  (sumar-minutos 15 4 20)
+  :rfc
+  ) 
