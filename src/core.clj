@@ -443,7 +443,7 @@
           (tc/drop-missing [:da :horadeatencin])
           (tc/map-columns :da #(when %
                                  (as-> % f
-                                   (string/split f #"/")
+                                   (string/split f #"/|-")
                                    (reverse f)
                                    (apply str f)
                                    (Integer/parseInt f))))
@@ -462,15 +462,13 @@
           (tc/map-columns :diagnstico (fnil sanitizar-string ""))
           (tc/map-columns :motivo (fnil sanitizar-string ""))
           (tc/map-columns :tratamiento (fnil sanitizar-string ""))
-          (tc/map-columns :mn #(when % (if (int? %) % (->> % (re-seq #"\d") (apply str) Integer/parseInt)))))
-      (catch ClassCastException e (let [msj (ex-message e)]
-                                    (prn "Hubo una excepción al parsear el archivo " msj)
-                                    (µ/log ::error-parseo-csv :mensaje msj)
-                                    (throw (ex-info "Hubo una excepción al parsear el archivo " {:mensaje msj} (ex-cause e)))))
-      (catch Exception e (let [msj (ex-message e)]
-                           (prn "Hubo una excepción al parsear el archivo " msj)
-                           (µ/log ::error-parseo-csv :mensaje msj)
-                           (throw (ex-info "Hubo una excepción al parsear el archivo " {:mensaje msj} (ex-cause e))))))))
+          (tc/map-columns :mn #(when % (if (int? %) % (->> % (re-seq #"\d") (apply str) Integer/parseInt))))) 
+      (catch Exception e (let [ex {:mensaje (ex-message e)
+                                   :datos (ex-data e)
+                                   :causa (ex-cause e)}]
+                           (prn "Hubo una excepción al parsear el archivo " ex)
+                           (µ/log ::error-parseo-csv :mensaje ex)
+                           (throw (ex-info "Hubo una excepción al parsear el archivo " ex (ex-cause e))))))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; MAIN ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -513,23 +511,12 @@
                                                  :motivo
                                                  :tratamiento])
                              (tc/rows :as-maps))]
-            (inserta-en-tablas-histpac ds-final desal-conn maestros-conn asistencial-conn))))
-      (catch SQLTimeoutException e (let [msj (ex-message e)]
-                                     (prn msj)
-                                     (µ/log ::error :mensaje msj)))
-      (catch SQLClientInfoException e (let [msj (ex-message e)]
-                                        (prn msj)
-                                        (µ/log ::error :mensaje msj)))
-      (catch SQLIntegrityConstraintViolationException e (let [msj (ex-message e)]
-                                                          (prn msj)
-                                                          (µ/log ::error :mensaje msj)))
-      (catch SQLException e (let [msj (ex-message e)]
-                              (prn msj)
-                              (µ/log ::error :mensaje msj)))
-      (catch Exception e (let [msj (ex-message e)
-                               data (ex-data e)]
-                           (prn (ex-message e) (ex-data e))
-                           (µ/log ::error :mensaje msj :datos data))))))
+            (inserta-en-tablas-histpac ds-final desal-conn maestros-conn asistencial-conn)))) 
+      (catch Exception e (let [ex {:mensaje (ex-message e)
+                                   :datos (ex-data e)
+                                   :causa (ex-cause e)}]
+                           (prn ex)
+                           (µ/log ::error :excepcion ex))))))
 
 (tests
 
@@ -596,6 +583,8 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
   
+  (-main {:print false :ruta "C://Users//jrivero//Downloads//Telemedicina-presencial-Sanatorio.csv" :perfil :prod})
+  
   (sql-busca-registro-en-tbc-histpac 12000 20240101 14 2)
 
   (with-open [conn (jdbc/get-connection asistencial-test)]
@@ -613,9 +602,10 @@
 
   (def csv-2 (leer-csv "/home/jrivero/RocioFlores.csv"))
 
-  (tc/info csv-2)
-
-  (tc/head csv)
+  (tap> (tc/info csv)) 
+   
+  (tap> (-> (tc/tail csv 50)
+            (tc/print-dataset)))
 
   (def csv-transformado
     (-> csv-2 (tc/drop-missing [:da :horadeatencin])
@@ -644,7 +634,7 @@
 
   (#(when % (->> % (re-seq #"\d") (apply str) Integer/parseInt)) "235645")
 
-  (def normalizado (normalizar-datos csv-2))
+  (def normalizado (normalizar-datos csv))
   
   (tc/info normalizado)
 
