@@ -300,8 +300,8 @@
            plan
            nro-afiliado
            nombredeldoctor
-           mn
-           diagnostico
+           mn 
+           diagnstico 
            seguimiento
            motivo
            tratamiento]}
@@ -354,7 +354,7 @@
       "N"
       0]
      [[numerador-tratamiento (str "Motivo: " motivo "\\n Seguimiento: " seguimiento)]
-      [numerador-diagnostico (str "Diagnóstico: " diagnostico " Tratamiento: " tratamiento) (str "Profesional: " doctor  " Matricula: " mn)]]]))
+      [numerador-diagnostico (str "Diagnóstico: " diagnstico " Tratamiento: " tratamiento) (str "Profesional: " doctor  " Matricula: " mn)]]]))
 
 (defn armar-registros-histpac-tbl-hist-txt
   "Devuelve los registros en un vector de vectores de la forma [[`histpac`] [`tbl-hist-txt`]]"
@@ -366,7 +366,7 @@
            nro-afiliado
            nombredeldoctor
            mn
-           diagnostico
+           diagnstico
            seguimiento
            motivo
            tratamiento]}
@@ -422,8 +422,8 @@
       da
       hora
       1
-      (str "Motivo " "Nro. " numerador-tratamiento ": " motivo)
-      (str "Diagnóstico: " diagnostico "\nTratamiento " "Nro. " numerador-diagnostico ": " historiaclinica "\nMédico: " doctor "\nMatrícula: " mn)]]))
+      (str "Motivo " "Nro. " numerador-tratamiento ": " motivo "\n Seguimiento: " seguimiento)
+      (str "Diagnóstico: " diagnstico "\nTratamiento " "Nro. " numerador-diagnostico ": " historiaclinica "\n" tratamiento "\nMédico: " doctor "\nMatrícula: " mn)]]))
 
 (defn insertar-en-tbc-histpac
   [registros conexion]
