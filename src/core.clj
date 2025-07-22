@@ -302,7 +302,7 @@
            nombredeldoctor
            mn 
            diagnstico 
-           seguimiento
+           seguimientoevolucin
            motivo
            tratamiento]}
    conexion-desal
@@ -353,7 +353,7 @@
       0
       "N"
       0]
-     [[numerador-tratamiento (str "Motivo: " motivo "\\n Seguimiento: " seguimiento)]
+     [[numerador-tratamiento (str "Motivo: " motivo "\\n Seguimiento: " seguimientoevolucin)]
       [numerador-diagnostico (str "Diagnóstico: " diagnstico " Tratamiento: " tratamiento) (str "Profesional: " doctor  " Matricula: " mn)]]]))
 
 (defn armar-registros-histpac-tbl-hist-txt
@@ -367,7 +367,7 @@
            nombredeldoctor
            mn
            diagnstico
-           seguimiento
+           seguimientoevolucin
            motivo
            tratamiento]}
    conexion-desal
@@ -422,8 +422,8 @@
       da
       hora
       1
-      (str "Motivo " "Nro. " numerador-tratamiento ": " motivo "\n Seguimiento: " seguimiento)
-      (str "Diagnóstico: " diagnstico "\nTratamiento " "Nro. " numerador-diagnostico ": " historiaclinica "\n" tratamiento "\nMédico: " doctor "\nMatrícula: " mn)]]))
+      (str "Motivo " "Nro. " numerador-tratamiento ": " motivo "\n Seguimiento: " seguimientoevolucin)
+      (str "Diagnóstico: " diagnstico "\nTratamiento " "Nro. " numerador-diagnostico " HC: " historiaclinica "\n" tratamiento "\nMédico: " doctor "\nMatrícula: " mn)]]))
 
 (defn insertar-en-tbc-histpac
   [registros conexion]
@@ -830,7 +830,7 @@
 
   (def registros2 (mapv #(armar-registros-histpac % desal-dev maestros-dev) dataset-final)) 
 
-  (tap> registros2)
+  (tap> registros)
 
   (tc/print-dataset dataset-final)
 
