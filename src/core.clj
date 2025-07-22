@@ -664,7 +664,7 @@
 (comment
 
   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; DEV SETUP ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-  
+
   (hyperfiddle.rcf/enable!)
 
   (clojure.repl.deps/sync-deps)
@@ -674,7 +674,7 @@
   (add-tap #'p/submit)
 
    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; CONEXIONES ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-  
+
   (def desal-prod (-> conf :prod :desal))
 
   (def desal-dev (-> conf :dev :desal))
@@ -691,9 +691,9 @@
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-  
+
   (-main {:print false :ruta "C://Users//jrivero//Downloads//Telemedicina-presencial-Sanatorio.csv" :perfil :prod})
-  
+
   (sql-busca-registro-en-tbc-histpac 12000 20240101 14 2)
 
   (with-open [conn (jdbc/get-connection asistencial-test)]
@@ -711,8 +711,8 @@
 
   (def csv-2 (leer-csv "/home/jrivero/RocioFlores.csv"))
 
-  (tap> (tc/info csv)) 
-  
+  (tap> (tc/info csv))
+
   (tap> (-> (tc/tail csv 50)
             (tc/print-dataset)))
 
@@ -744,7 +744,7 @@
   (#(when % (->> % (re-seq #"\d") (apply str) Integer/parseInt)) "235645")
 
   (def normalizado (normalizar-datos csv))
-  
+
   (tc/info normalizado)
 
   (tap> normalizado)
@@ -754,7 +754,7 @@
   (existe-registro? asistencial-prod 874113 20250204 15 04)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; PROCESAR tbc_reservas en memoria ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-  
+
 
   (let [valid-date? (fn [d] (== 8 (-> d str count)))
         ds normalizado
@@ -782,7 +782,7 @@
         (tc/drop-rows (fn [row] (int? (:historiaclinica row))))
         (tc/select-columns [:da :horadeatencin :dnidelpaciente :nombredelpaciente])
         (tc/print-dataset {:print-line-policy :single})))
-  
+
   (def reservas (obtener-ds-reservas asistencial-prod 20250101))
 
   (tc/info reservas)
@@ -792,15 +792,15 @@
   (tc/select-rows normalizado (comp #{32531145 43476960 44363731} :dnidelpaciente))
 
   (def d (adjuntar-info-complementaria normalizado asistencial-prod))
-  
+
   (tc/select-rows d #(#{32531145 43476960 44363731} (:dnidelpaciente %)))
-  
+
   (def d-2 (tc/unique-by d [:dnidelpaciente :historiaclinica :da :horadeatencin]))
 
   (tc/select-rows d (comp #{32531145 43476960 44363731} :dnidelpaciente))
 
   (tc/select-rows d-2 (comp #{32531145 43476960 44363731} :dnidelpaciente))
-  
+
   (tc/tail d 50)
 
   (def dataset-final
@@ -828,7 +828,7 @@
 
   (def registros (mapv #(armar-registros-histpac-tbl-hist-txt % desal-dev maestros-dev) dataset-final))
 
-  (def registros2 (mapv #(armar-registros-histpac % desal-dev maestros-dev) dataset-final)) 
+  (def registros2 (mapv #(armar-registros-histpac % desal-dev maestros-dev) dataset-final))
 
   (tap> registros)
 
@@ -875,14 +875,28 @@
                             :motivo
                             :tratamiento])
         (tc/rows :as-maps)))
+
   (inserta-en-tablas-histpac registro desal-prod maestros-prod asistencial-prod)
   (def v (armar-registros-histpac (first registro) desal-prod maestros-prod))
 
   (insertar-en-tbc-histpac [(first v)] asistencial-prod)
   (apply guarda-texto-de-historia asistencial-prod (first (v 1)))
 
+  (try
+    (inserta-en-tablas-histpac-new (take 2 dataset-final) desal-dev maestros-dev asistencial-dev)
+    (catch Exception e (prn e)))
+
+  (mapv #(armar-registros-histpac-tbl-hist-txt % desal-dev maestros-dev) (take 2 dataset-final))
+
+  (tap> (take 2 registros))
+
+  (tap> (with-open [conn (jdbc/get-connection desal-dev)]
+          (jdbc/execute! conn ["select *
+                         from tbl_hist_txt tht
+                         where ht_histclin in (690650,866589)"])))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;  
-  
+
 
   (drop 580 (tc/column normalizado :dnidelpaciente))
 
@@ -1003,9 +1017,9 @@
        (seq "CARDINALI, CÉSAR"))
 
 ;;;;;;;;;;;;;;;;;;;;; PREPARAR BASE DE DATOS DEL PERFIL TEST ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-  
+
   ;; Asegurarse de poblar las bases de tbc_reservas y tbc_hist_cab_new con los datos adecuados!!!
-  
+
   (with-open [conn (jdbc/get-connection asistencial-test)]
     (jdbc/execute! conn ["CREATE TABLE tbc_histpac (
 	HistpacNro DECIMAL(10,0) NOT NULL,
