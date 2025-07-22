@@ -149,6 +149,18 @@
                          :txt6]
                :values [values]}))
 
+(defn sql-inserta-en-tbl-hist-txt
+  [values]
+  (sql/format {:insert-into :tbl-hist-txt
+               :columns [:ht_histclin
+                         :ht_fecha
+                         :ht_hora
+                         :ht_entrada
+                         :ht_motivo
+                         :ht_tratamiento]
+               :values [values]}))
+
+
 (defn obtener-ds-reservas
   [asistencial min-date]
   (µ/log ::obteniendo-dataset-reservas)
@@ -344,6 +356,75 @@
      [[numerador-tratamiento (str "Motivo: " motivo "\\n Seguimiento: " seguimiento)]
       [numerador-diagnostico (str "Diagnóstico: " diagnostico " Tratamiento: " tratamiento) (str "Profesional: " doctor  " Matricula: " mn)]]]))
 
+(defn armar-registros-histpac-tbl-hist-txt
+  "Devuelve los registros en un vector de vectores de la forma [[`histpac`] [`tbl-hist-txt`]]"
+  [{:keys [historiaclinica
+           da ;; dia
+           horadeatencin
+           obra
+           plan
+           nro-afiliado
+           nombredeldoctor
+           mn
+           diagnostico
+           seguimiento
+           motivo
+           tratamiento]}
+   conexion-desal
+   conexion-maestros]
+  (let [[hora minutos segundos] (descomponer-hora horadeatencin)
+        [hora-fin minutos-fin] (sumar-minutos hora minutos 20)
+        numerador-tratamiento (obtiene-numerador! conexion-desal)
+        numerador-diagnostico (obtiene-numerador! conexion-desal)
+        doctor (->> nombredeldoctor (take 29) (apply str))
+        desc-diagnostico (->> (obtener-descripcion-diagnostico conexion-maestros) (take 27) (apply str))]
+    [[historiaclinica
+      da
+      hora
+      minutos
+      segundos
+      2
+      407 ;; Sacar tbc_reservas reservas_esp
+      historiaclinica
+      da
+      historiaclinica
+      407
+      999880
+      numerador-tratamiento
+      0
+      0
+      hora-fin
+      minutos-fin
+      0
+      desc-diagnostico
+      3264
+      numerador-diagnostico
+      doctor
+      mn
+      hora
+      minutos
+      segundos
+      0
+      0
+      ""
+      (or obra 0)
+      (or plan "")
+      ""
+      (or nro-afiliado "")
+      0
+      ""
+      0
+      0
+      0
+      "N"
+      0]
+     [historiaclinica
+      da
+      hora
+      1
+      (str "Motivo " "Nro. " numerador-tratamiento ": " motivo)
+      (str "Diagnóstico: " diagnostico "\nTratamiento " "Nro. " numerador-diagnostico ": " historiaclinica "\nMédico: " doctor "\nMatrícula: " mn)]]))
+
 (defn insertar-en-tbc-histpac
   [registros conexion]
   (prn "Insertando registros en tbc_histpac...")
@@ -366,6 +447,17 @@
     (prn (str @cantidad " registro(s) insertado(s)"))
     (µ/log ::registros-insertados :cantidad @cantidad)))
 
+(defn insertar-en-tbl-hist-txt
+  [registros desal-con]
+  (prn "Insertando registros en tbl_hist_txt...")
+  (µ/log ::insercion-tbl-hist-txt)
+  (doseq [registro registros] (try
+                                (jdbc/execute! desal-con (sql-inserta-en-tbl-hist-txt registro) {:builder-fn rs/as-unqualified-kebab-maps}) 
+                                (catch SQLException e (let [msj (ex-message e)]
+                                                        (prn (str "Hubo un problema al insertar en tbl_hist_txt " msj))
+                                                        (µ/log ::error-insercion-tbl-hist-txt :mensaje msj :registro registro) 
+                                                        (ex-info "Error al insertar en tbl_hist_txt" {:mensaje msj :registro registro} (ex-cause e)))))))
+
 (defn existe-registro?
   [conn-asistencial hc fecha hora minutos]
   (let [busqueda (try
@@ -381,7 +473,7 @@
       true)))
 
 (defn filtrar-registros-existentes
-  "Recibe un vector de vectores como el producido por `armar-registros-histpac` y devuelve un vector con las mismas propiedades con excepción de 
+  "Recibe un vector de vectores como el producido por `armar-registros-histpac` o `armar-registros-histpac-tbl-hist-txt` y devuelve un vector con las mismas propiedades con excepción de 
    los vectores que contienen la información de los registros ya insertados"
   [registros-vec conexion-asistencial]
   (prn "Buscando registros ya guardados...")
@@ -412,6 +504,21 @@
     (catch SQLException e (let [msj (ex-message e)]
                             (µ/log ::error-insercion-tablas-histpac :mensaje msj)
                             (throw (ex-info "Hubo una excepción al insertar en tbc_histpac / tbc_histpac_txt: " {:mensaje msj} (ex-cause e)))))))
+
+(defn inserta-en-tablas-histpac-new
+  [ds-vec desal-conn maestros-conn asistencial-conn]
+  (prn "Comenzando la inserción de registros => tbc_histpac y textos en tbl_hist_txt...")
+  (µ/log ::inicio-insercion-tablas-histpac-textos-en-tbl-hist-txt)
+  (try
+    (let [registros (mapv #(armar-registros-histpac-tbl-hist-txt % desal-conn maestros-conn) ds-vec)
+          registros-filtrados (filtrar-registros-existentes registros asistencial-conn)
+          registros-histpac (mapv first registros-filtrados)
+          registros-hist-txt (mapv second registros-filtrados)]
+      (insertar-en-tbc-histpac registros-histpac asistencial-conn)
+      (insertar-en-tbl-hist-txt registros-hist-txt desal-conn))
+    (catch Exception e (let [msj (ex-message e)]
+                         (µ/log ::error-insercion-tablas-histpac-tbl-hist-txt :mensaje msj)
+                         (throw (ex-info "Hubo una excepción al insertar en tbc_histpac / tbl_hist_txt: " {:mensaje msj} (ex-cause e)))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; PROCESA ARCHIVO CSV ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -474,14 +581,14 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; MAIN ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defn -main
-  "Invoke me with clojure -X:ingresar :perfil (:prod, :dev ó :test) :ruta (e.g. C://Users//jrivero//Downloads//Telemedicina-presencial-Sanatorio.csv) :print boolean"
-  [& {:keys [perfil ruta print]}]
+  "Invoke me with clojure -X:ingresar :perfil (:prod, :dev ó :test) :ruta (e.g. C://Users//jrivero//Downloads//Telemedicina-presencial-Sanatorio.csv) :print boolean :tbl-hist-txt true (defaults to false)"
+  [& {:keys [perfil ruta print tbl-hist-txt] :or {tbl-hist-txt false}}]
   (iniciar-mulog perfil)
-  (prn (str "Argumentos recibidos en main: " perfil " | " ruta " | " print))
+  (prn (str "Argumentos recibidos en main: " perfil " | " ruta " | " print " | " tbl-hist-txt))
   (µ/log ::iniciando-programa :argumentos {:perfil perfil :ruta ruta :print print})
   (when (some nil? [perfil ruta print])
     (µ/log ::invocacion-con-argumentos-insuficientes)
-    (throw (ex-info "Invocar de la siguiente manera: clojure -X:ingresar :perfil (:prod, :dev ó :test) :ruta (e.g. \"C://Users//jrivero//Downloads//Telemedicina-presencial-Sanatorio.csv\") :print boolean"
+    (throw (ex-info "Invocar de la siguiente manera: clojure -X:ingresar :perfil (:prod, :dev ó :test) :ruta (e.g. \"C://Users//jrivero//Downloads//Telemedicina-presencial-Sanatorio.csv\") :print boolean :tbl-hist-txt true (false por defecto)"
                     {})))
   (let [conexiones (-> conf perfil)
         desal (:desal conexiones)
@@ -511,7 +618,9 @@
                                                  :motivo
                                                  :tratamiento])
                              (tc/rows :as-maps))]
-            (inserta-en-tablas-histpac ds-final desal-conn maestros-conn asistencial-conn)))) 
+            (if tbl-hist-txt
+              (inserta-en-tablas-histpac-new ds-final desal-conn maestros-conn asistencial-conn)
+              (inserta-en-tablas-histpac ds-final desal-conn maestros-conn asistencial-conn))))) 
       (catch Exception e (let [ex {:mensaje (ex-message e)
                                    :datos (ex-data e)
                                    :causa (ex-cause e)}]
@@ -603,7 +712,7 @@
   (def csv-2 (leer-csv "/home/jrivero/RocioFlores.csv"))
 
   (tap> (tc/info csv)) 
-   
+  
   (tap> (-> (tc/tail csv 50)
             (tc/print-dataset)))
 
@@ -637,6 +746,10 @@
   (def normalizado (normalizar-datos csv))
   
   (tc/info normalizado)
+
+  (tap> normalizado)
+
+  (tc/map-columns normalizado :diagnstico sanitizar-string)
 
   (existe-registro? asistencial-prod 874113 20250204 15 04)
 
@@ -691,7 +804,7 @@
   (tc/tail d 50)
 
   (def dataset-final
-    (with-open [conn (jdbc/get-connection asistencial-prod)]
+    (with-open [conn (jdbc/get-connection #_asistencial-prod asistencial-dev)]
       (-> (adjuntar-info-complementaria normalizado conn)
           (tc/select-columns [:historiaclinica
                               :da
@@ -712,6 +825,12 @@
           (tc/rows :as-maps))))
 
   (tap> dataset-final)
+
+  (def registros (mapv #(armar-registros-histpac-tbl-hist-txt % desal-dev maestros-dev) dataset-final))
+
+  (def registros2 (mapv #(armar-registros-histpac % desal-dev maestros-dev) dataset-final)) 
+
+  (tap> registros2)
 
   (tc/print-dataset dataset-final)
 
